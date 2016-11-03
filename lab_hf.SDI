@@ -1,0 +1,316 @@
+,,,       
+,,,       
+,,,       ;**********************************************************************
+,,,       ;**                                                                  **
+,,,       ;**         Mérés Laboratórium II. - 2. mérés - házi feladat         **
+,,,       ;**                                                                  **
+,,,       ;**   Leírás:         Q3(M). Fényorgona visszajátszás funkcióval     **
+,,,       ;**                       bõvebb leírásért lásd: dokumentacio.pdf    **
+,,,       ;**   Szerzõ:         Martinka Mátyás (EJJKIN)                       **
+,,,       ;**                   Trombitás Péter (G08HLM)                       **
+,,,       ;**   Mérõcsoport:    CDE4 kurzus, 6. mérõcsoport                    **
+,,,       ;**   Készült:        2013/2014. II. félév                           **
+,,,       ;**                   2014. 04. 11.                                  **
+,,,       ;**                                                                  **
+,,,       ;**********************************************************************
+,,,       ;**********************************************************************
+,,,       
+,,,       
+,,,       
+,,,       ;*** DEFINÍCIÓK ***
+,,,       
+,,,       ; ATMega 128 definíciós fájl betöltése
+,,,       .list
+,,,       
+,,,       ; Regiszterkiosztás
+,,,       .def   temp    = r16                   ; általános segédregiszter
+,,,       .def   temp2   = r17                   ; általános segédregiszter
+,,,       .def   sstate  = r18                   ; SW0 aktuális állapota
+,,,       .def   sprev   = r19                   ; SW0 elõzõ állapota
+,,,       .def   pos             = r20                   ; visszajátszás aktuális pozíciója
+,,,       .def   tconst  = r21                   ; idõzítéshez használt regiszter
+,,,       
+,,,       ; SRAM foglalása
+,,,       .dseg
+000200,0000,,       pattern:        .byte   256             ; Az eltárolt minták helye
+000400,000C,,       count:          .byte   1               ; Az eltárolt minták száma
+,,,       
+,,,       
+,,,       
+,,,       ;*** RESET ÉS IT VEKTORTÁBLA ***
+,,,       
+,,,       .cseg 
+,,,       .org   0x0000          ; Kódszegmens kezdõcíme 
+,,,       
+000000,940C,jmp            main            ; Reset vektor ,jmp            main            ; Reset vektor 
+000004,940C,jmp            dummy           ; EXTINT0 Handler,jmp            dummy           ; EXTINT0 Handler
+000008,940C,jmp            dummy           ; EXTINT1 Handler,jmp            dummy           ; EXTINT1 Handler
+00000C,940C,jmp            dummy           ; EXTINT2 Handler,jmp            dummy           ; EXTINT2 Handler
+000010,940C,jmp            dummy           ; EXTINT3 Handler,jmp            dummy           ; EXTINT3 Handler
+000014,940C,jmp            dummy           ; EXTINT4 Handler (INT gomb),jmp            dummy           ; EXTINT4 Handler (INT gomb)
+000018,940C,jmp            dummy           ; EXTINT5 Handler,jmp            dummy           ; EXTINT5 Handler
+00001C,940C,jmp            dummy           ; EXTINT6 Handler,jmp            dummy           ; EXTINT6 Handler
+000020,940C,jmp            dummy           ; EXTINT7 Handler,jmp            dummy           ; EXTINT7 Handler
+000024,940C,jmp            dummy           ; Timer2 Compare Match Handler ,jmp            dummy           ; Timer2 Compare Match Handler 
+000028,940C,jmp            dummy           ; Timer2 Overflow Handler ,jmp            dummy           ; Timer2 Overflow Handler 
+00002C,940C,jmp            dummy           ; Timer1 Capture Event Handler ,jmp            dummy           ; Timer1 Capture Event Handler 
+000030,940C,jmp            dummy           ; Timer1 Compare Match A Handler ,jmp            dummy           ; Timer1 Compare Match A Handler 
+000034,940C,jmp            dummy           ; Timer1 Compare Match B Handler ,jmp            dummy           ; Timer1 Compare Match B Handler 
+000038,940C,jmp            dummy           ; Timer1 Overflow Handler ,jmp            dummy           ; Timer1 Overflow Handler 
+00003C,940C,jmp            t0it            ; Timer0 Compare Match Handler ,jmp            t0it            ; Timer0 Compare Match Handler 
+000040,940C,jmp            dummy           ; Timer0 Overflow Handler ,jmp            dummy           ; Timer0 Overflow Handler 
+000044,940C,jmp            dummy           ; SPI Transfer Complete Handler ,jmp            dummy           ; SPI Transfer Complete Handler 
+000048,940C,jmp            dummy           ; USART0 RX Complete Handler ,jmp            dummy           ; USART0 RX Complete Handler 
+00004C,940C,jmp            dummy           ; USART0 Data Register Empty Hanlder ,jmp            dummy           ; USART0 Data Register Empty Hanlder 
+000050,940C,jmp            dummy           ; USART0 TX Complete Handler ,jmp            dummy           ; USART0 TX Complete Handler 
+000054,940C,jmp            dummy           ; ADC Conversion Complete Handler ,jmp            dummy           ; ADC Conversion Complete Handler 
+000058,940C,jmp            dummy           ; EEPROM Ready Hanlder ,jmp            dummy           ; EEPROM Ready Hanlder 
+00005C,940C,jmp            dummy           ; Analog Comparator Handler ,jmp            dummy           ; Analog Comparator Handler 
+000060,940C,jmp            dummy           ; Timer1 Compare Match C Handler ,jmp            dummy           ; Timer1 Compare Match C Handler 
+000064,940C,jmp            dummy           ; Timer3 Capture Event Handler ,jmp            dummy           ; Timer3 Capture Event Handler 
+000068,940C,jmp            dummy           ; Timer3 Compare Match A Handler ,jmp            dummy           ; Timer3 Compare Match A Handler 
+00006C,940C,jmp            dummy           ; Timer3 Compare Match B Handler ,jmp            dummy           ; Timer3 Compare Match B Handler 
+000070,940C,jmp            dummy           ; Timer3 Compare Match C Handler ,jmp            dummy           ; Timer3 Compare Match C Handler 
+000074,940C,jmp            dummy           ; Timer3 Overflow Handler ,jmp            dummy           ; Timer3 Overflow Handler 
+000078,940C,jmp            dummy           ; USART1 RX Complete Handler ,jmp            dummy           ; USART1 RX Complete Handler 
+00007C,940C,jmp            dummy           ; USART1 Data Register Empty Hanlder ,jmp            dummy           ; USART1 Data Register Empty Hanlder 
+000080,940C,jmp            dummy           ; USART1 TX Complete Handler ,jmp            dummy           ; USART1 TX Complete Handler 
+000084,940C,jmp            dummy           ; Two-wire Serial Interface Handler ,jmp            dummy           ; Two-wire Serial Interface Handler 
+000088,940C,jmp            dummy           ; Store Program Memory Ready Handler ,jmp            dummy           ; Store Program Memory Ready Handler 
+,,,       
+,,,       
+,,,       
+,,,       ;*** FÕPROGRAM, INICIALIZÁCIÓK ***
+,,,       
+,,,       .org   0x0046
+,,,       main:
+,,,       
+,,,              ; stack inicializálása
+00008C,EF0F,,       ldi             temp,LOW(RAMEND)        ; RAMEND = RAM végcíme
+00008E,BF0D,,       out             SPL,temp                        ; (ld."m128def.inc") 
+000090,E100,,       ldi             temp,HIGH(RAMEND)
+000092,BF0E,,       out             SPH,temp
+,,,       
+,,,              ; LED0-7 inicializálása
+000094,EF0F,,       ldi             temp, 0xFF                      ; portbitek kimenetek
+000096,BB04,,       out             DDRC, temp                      ; PORTC kimenet
+,,,       
+,,,              ; SW0 inicializálása
+000098,E000,,       ldi             temp, 0x00                      ; portbitek bemenetek
+00009A,9300,,       sts             DDRG, temp                      ; PORTG bemenet
+00009E,EF0F,,       ldi             temp, 0xFF                      ; pull-up engedélyezve
+0000A0,9300,,       sts             PORTG, temp                     ; PORTG bemenetein
+,,,       
+,,,              ; SW0 alapállapotának betöltése
+0000A4,9130,,       lds             sprev, PING
+0000A8,7031,,       andi    sprev, 0x01                     ; PING LSB SW0 állapota 
+,,,       
+,,,              ; BTN0-2 inicializálása
+0000AA,E000,,       ldi             temp, 0x00                      ; portbitek bemenetek
+0000AC,B902,,       out             DDRE, temp                      ; PORTE bemenet
+0000AE,EF0F,,       ldi             temp, 0xFF                      ; pull-up engedélyezve
+0000B0,B903,,       out             PORTE, temp                     ; PORTE bemenetein
+,,,       
+,,,              ; BNT3 inicializálása
+0000B2,E000,,       ldi             temp, 0x00                      ; portbitek bemenetek
+0000B4,BB07,,       out             DDRB, temp                      ; PORTB bemenet
+0000B6,EF0F,,       ldi             temp, 0xFF                      ; pull-up engedélyezve
+0000B8,BB08,,       out             PORTB, temp                     ; PORTB bemenetein
+,,,       
+,,,              ; potméter inicializálása
+0000BA,E000,,       ldi             temp,0b00000000         ; portbitek bemenetek
+0000BC,9300,,       sts             DDRF,temp                       ; PORTF bemenet
+0000C0,E603,,       ldi     temp, 0b01100011        ; ADMUX: 5V ref, balra igazított, potméter
+,,,                                        ; 01......        REFS = 01 (referenciafeszültség: 5V VCC) 
+,,,                                        ; ..1.....        ADLAR = 1 (balra igazított) 
+,,,                                        ; ...00011        ADMUX = 00011 (potméter) 
+0000C2,B907,,       out ADMUX, temp 
+0000C4,EE07,,       ldi     temp, 0b11100111        ; ADCSRA: folyamatos futás, IT, 128-as elõosztó 
+,,,                                        ; 1.......        ADEN = 1 (A/D engedélyezése) 
+,,,                                        ; .1......        ADSC = 1 (start conversion) 
+,,,                                        ; ..1.....        ADFR = 1 (free running / folyamatos konverzió) 
+,,,                                        ; ...0....        ADIF (nem töröljük a megszakításjelzõ flaget) 
+,,,                                        ; ....0...        ADIE = 1 (megszakítások engedélyezése) 
+,,,                                        ; .....111        ADPS = 111 (128-as elõosztó) 
+0000C6,B906,,       out ADCSRA, temp
+,,,              
+,,,              ; SRAM-ban és regiszterben a számlálók kinullázása
+0000C8,E040,,       ldi             pos, 0x00
+0000CA,9340,,       sts             count, pos
+,,,       
+,,,       
+,,,              ; 10ms idõzítõ inicializálása
+,,,       
+0000CE,E159,,       ldi             tconst, 25                      ; idõzítési konstans (T = 25*10 ms = 250ms)
+0000D0,E00F,,       ldi             temp, 0b00001111        ; Timer 0 TCCR0 regiszter
+,,,                                        ;     0.......            FOC=0
+,,,                                        ;     .0..1...                WGM=10 (CTC mod)
+,,,                                        ;     ..00....                COM=00 (kimenet tiltva)
+,,,                                        ;     .....111                CS0=111 (CLK/1024)
+0000D2,BF03,,       out             TCCR0, temp
+,,,       
+0000D4,E60C,,       ldi             temp, 108                       ; 11059200Hz/1024 = 108*100
+0000D6,BF01,,       out             OCR0, temp                      ; Timer 0 OCR0 regiszter
+,,,       
+0000D8,E002,,       ldi             temp, 0b00000010        ; Timer IT Mask regiszter
+,,,                                        ; 000000..            Timer2,1 IT tiltva
+,,,                                        ; ......1.            OCIE0=1
+,,,                                        ; .......0            TOIE0=0
+0000DA,BF07,,       out             TIMSK, temp
+,,,       
+0000DC,9478,,       sei                                                     ; globális IT engedélyezve
+,,,       
+,,,       
+,,,       
+,,,       ;*** FÕPROGRAM, VÉGTELEN CIKLUS ***
+,,,                      
+0000DE,9120,loop,loop:  lds             sstate,PING                             ; kapcsolók állaptának beolvasása
+0000E2,7021,,               andi    sstate, 0x01                    ; maszkolás -> csak sw0 állapota tárolódik, sstate LSB-jén
+0000E4,2F02,,               mov             temp, sstate                    
+0000E6,2703,,               eor             temp, sprev                             ; jelen és elõzõ állapot összehasonlítása
+0000E8,F419,,               brne    sw0it                                   ; ha nem egyezik a két állapot, kapcslás volt SW0-n -> kezeljük
+,,,                      carry_on:
+0000EA,2F32,,                       mov             sprev, sstate           ; aktuális állapot betöltése a köv. ciklusban való összehasonlításhoz
+0000EC,940C,,                       jmp             loop                            ; végtelen hurok 
+,,,       
+,,,       
+,,,       
+,,,       ;*** SW0 INTERRUPT ***
+,,,       
+,,,       sw0it:
+0000F0,E0A0,,       ldi             XL, LOW(SRAM_START)             ; pointer vissza az SRAM elejére
+0000F2,E0B1,,       ldi             XH, HIGH(SRAM_START)
+0000F4,E000,,       ldi             temp, 0x00
+0000F6,BB05,,       out             PORTC, temp                             ; LED-ek elsötétítése
+0000F8,FF20,,       sbrs    sstate, 0                               ; SW0 aktív ?
+0000FA,940C,,       jmp             rec_mode_it                             ; SW0 = 1, felvétel mód
+0000FE,940C,,       jmp             play_mode_it                    ; SW0 = 0, lejátszás mód
+,,,       
+,,,       rec_mode_it:                                           ; 'interrupt', felvétel mód inicializálása
+000102,E000,,       ldi             temp, 0
+000104,9300,,       sts             count, temp
+000108,940C,,       jmp             carry_on                                ; visszatérés az 'interrupt'-ból
+,,,                      
+,,,       play_mode_it:                                          ; 'interrupt', lejátszási mód inicializálása
+00010C,E040,,       ldi             pos, 0
+00010E,940C,,       jmp             carry_on                                ; visszatérés az 'interrupt'-ból
+,,,       
+,,,       
+,,,       
+,,,       ;*** 10ms TIMER INTERRUPT ***
+,,,       
+,,,       .dseg
+000402,000C,,       c_timer:        .byte   1               ; c_timer számláló, 1 byte helyfoglalás RAM-ban 
+,,,       
+,,,       .cseg
+,,,       
+,,,       t0it:
+000112,930F,,       push    temp                            ; segédregiszter mentése
+000114,B70F,,       in              temp, SREG                      ; státusz mentése
+000116,930F,,       push    temp
+000118,9100,,       lds             temp, c_timer           ; c_timer számláló
+00011C,950A,,       dec             temp                            ; csökkentése
+00011E,9300,,       sts             c_timer, temp           ; és tárolása
+000122,F5E9,,       brne    t0ite                           ; ugrás, ha nem járt le
+000124,2F05,,       mov             temp, tconst            ; számláló visszaállítása
+000126,9300,,       sts             c_timer, temp
+00012A,FF20,,       sbrs    sstate, 0                       ; SW0 aktív ?
+00012C,940C,,       jmp             rec                                     ; SW0 = 1, felvétel mód
+000130,940C,,       jmp             play                            ; SW0 = 0, lejátszás mód
+,,,       
+,,,       
+,,,       ; FELVÉTEL MÓD
+,,,       rec:
+000134,E159,,       ldi             tconst, 25                      ; idõzítés rendbe szedése
+,,,       
+,,,              ; gombok beolvasása
+000136,B101,,       in              temp, PINE                      ; BTN0-2
+000138,B316,,       in              temp2, PINB                     ; BTN3
+,,,       
+,,,              ; Az 5-7 biteket átpakoljuk a 0-2 helyekre
+00013A,FB07,,       bst             temp, 7
+00013C,F902,,       bld     temp, 2
+00013E,FB06,,       bst             temp, 6
+000140,F901,,       bld             temp, 1
+000142,FB05,,       bst             temp, 5
+000144,F900,,       bld             temp, 0
+,,,       
+000146,FB17,,       bst     temp2, 7                        ; BTN3 értéke a transzfer regiszterbe
+000148,F903,,       bld             temp, 3                         ; visszatöltés a jó helyre (temp-ben most BTN0-3 bent van)
+,,,       
+,,,              ; negáljuk a gombok állapotát, mert lenyomva 0, de a LED 1-es állapotban világít
+00014A,EF1F,,       ldi             temp2, 0xFF
+00014C,2701,,       eor             temp, temp2
+00014E,700F,,       andi    temp, 0x0F
+,,,       
+000150,9110,,       lds             temp2, count            ; számláló növelése
+000154,9513,,       inc     temp2
+,,,       
+000156,F061,,       breq    rec_overflow            ; túlcsordulás kezelése
+,,,       
+000158,9310,,       sts             count, temp2            ; számláló visszaírása
+00015C,930D,,       st              X+, temp                        ; aktuális minta tárolása SRAM-ban
+00015E,930F,,       push    temp                            ; temp tárolása a stack-en
+,,,       
+,,,              ; jobb oszlopban lévõ LED-ek villogtatása
+000160,B315,,       in              temp2,PORTC                     ; LED állapot beolvasása
+000162,EF0F,,       ldi             temp, 0xFF                      ; negálás, a villogtatáshoz
+000164,2710,,       eor             temp2, temp
+000166,7F10,,       andi    temp2, 0xF0
+,,,       
+000168,910F,,       pop             temp                            ; temp visszaolvasása a stack-rõl
+00016A,2B01,,       or              temp, temp2                     ; bal oszlopban az aktuális gombminta, jobb oszlop villog
+00016C,940C,,       jmp             leds
+,,,       
+,,,       ; felvétel mód túlcsordulásának kezelése
+,,,       rec_overflow:
+000170,EF0F,,       ldi             temp, 0xFF                      ; minden LED világít
+000172,940C,,       jmp             leds
+,,,       
+,,,       
+,,,       ; LEJÁTSZÁS MÓD
+,,,       play:
+000176,B105,,       in              temp, ADCH                      ; potméter beolvasása
+,,,       
+,,,              ; 8 állás meghatározása
+000178,7E00,,       andi    temp, 0xE0                      ; csak a 3 felsõ bit érdekes
+00017A,9506,,       lsr             temp                            ; 4-gyel osztás, idõzítés kezeléséhez
+00017C,9506,,       lsr             temp
+00017E,9503,,       inc             temp
+000180,2F50,,       mov             tconst, temp            ; tconst beállítása arra az idõzítésre, amit a potméter mutat
+,,,       
+,,,              ; aktuális mentett minta visszaolvasása
+000182,910D,,       ld              temp, X+
+000184,9543,,       inc     pos
+,,,       
+,,,              ; ha körbeértünk, újrakezdjük
+000186,9110,,       lds             temp2, count
+00018A,1B14,,       sub             temp2, pos
+00018C,F011,,       breq    play_loop
+,,,       
+00018E,940C,,       jmp     leds
+,,,       
+,,,       
+,,,       ; lejátszás végén ismétlés
+,,,       play_loop:
+000192,E0A0,,       ldi             XL, LOW(SRAM_START)             ; pointer vissza az SRAM elejére
+000194,E0B1,,       ldi             XH, HIGH(SRAM_START)
+000196,E040,,       ldi             pos, 0                                  ; pozíció regiszter nullázása
+000198,940C,,       jmp             leds
+,,,       
+,,,       
+,,,       ; LED-sor a regiszterbõl a kimenetre
+,,,       leds:
+00019C,BB05,,       out             PORTC, temp
+,,,       
+,,,       
+,,,       ; Timer IT vége
+,,,       t0ite:
+00019E,910F,,       pop             temp                                    ; regiszterek visszaállítása
+0001A0,BF0F,,       out             SREG, temp
+0001A2,910F,,       pop             temp
+,,,       
+,,,       ; Visszatérés az IT-ból
+,,,       dummy:
+,,,
+,,,
